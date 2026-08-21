@@ -36,6 +36,22 @@ public class ProjectIntegration {
     private String metricsToken="";
     private String prometheusJobName="";// matches METRICS_TOKEN on the Render side
 
+    // NEW — generic "deploy hook" URL. Most hosting platforms (Render, Railway,
+    // Fly.io, Vercel, Netlify, Heroku) expose a POST endpoint that redeploys the
+    // latest build with zero platform-specific API integration required on our
+    // side. CI calls this after a successful build+push so a real deploy actually
+    // happens, instead of the CI run only exercising a throwaway container on the
+    // runner itself. Optional — if blank, that step is just skipped.
+    private String deployHookUrl = "";
+
+    public String getDeployHookUrl() {
+        return deployHookUrl;
+    }
+
+    public void setDeployHookUrl(String deployHookUrl) {
+        this.deployHookUrl = deployHookUrl;
+    }
+
     public String getPrometheusJobName() {
         return prometheusJobName;
     }
@@ -60,7 +76,7 @@ public class ProjectIntegration {
         this.monitoredUrl = monitoredUrl;
     }
 
-      // e.g. "render-nodejs-backend" — must match prometheus.yml
+    // e.g. "render-nodejs-backend" — must match prometheus.yml
 
 
     public ProjectIntegration() {}

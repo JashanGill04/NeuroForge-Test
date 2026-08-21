@@ -22,6 +22,8 @@ public interface ReleaseRepository extends JpaRepository<Release, Long> {
     List<Release> findAllByOrderByReleaseDateDesc();
 
 
+    // --- Deployments that came from a NeuroForge-triggered CI run (existing flow) ---
+
     List<Release> findByDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(Long projectId);
 
     Optional<Release> findTopByEnvironmentAndActiveTrueAndDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(
@@ -34,11 +36,16 @@ public interface ReleaseRepository extends JpaRepository<Release, Long> {
             LocalDateTime start, LocalDateTime end, Long projectId);
 
 
+    // --- NEW: deployments that came straight from a hosting provider's webhook
+    //     (no Pipeline attached) — see Deployment.project / resolveProjectId() ---
 
+    List<Release> findByDeployment_Project_IdOrderByReleaseDateDesc(Long projectId);
 
+    Optional<Release> findTopByEnvironmentAndActiveTrueAndDeployment_Project_IdOrderByReleaseDateDesc(
+            DeploymentEnvironment environment, Long projectId);
 
-
-
+    List<Release> findByEnvironmentAndDeployment_Project_IdOrderByReleaseDateDesc(
+            DeploymentEnvironment environment, Long projectId);
 
 
     long countByReleaseDateBetween(LocalDateTime start, LocalDateTime end);

@@ -17,7 +17,9 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -39,6 +41,54 @@ public class ReleaseService {
     // bookkeeping (blue-green slot swap, status transitions) on top.
     @Autowired private PipelineService pipelineService;
 
+    // -------------------------------------------------------------------
+    // Project-scoped lookup helpers.
+    //
+    // A Release's Deployment can be linked to its Project two ways: via a
+    // Pipeline (the original CI-triggered flow), or directly (deployments
+    // recorded straight from a hosting provider's webhook — see
+    // DeployWebhookController). Since Step 1, *every* new Deployment sets
+    // the direct `project` link regardless of which path created it, so a
+    // naive "query both and concat" would double-count CI-originated
+    // releases. These helpers merge by Release id instead, so each release
+    // shows up exactly once no matter which path recorded its deployment.
+    // -------------------------------------------------------------------
+
+    private List<Release> mergeById(List<Release> a, List<Release> b) {
+        Map<Long, Release> byId = new LinkedHashMap<>();
+        for (Release r : a) byId.put(r.getId(), r);
+        for (Release r : b) byId.put(r.getId(), r);
+        List<Release> merged = new ArrayList<>(byId.values());
+        merged.sort(Comparator.comparing(Release::getReleaseDate).reversed());
+        return merged;
+    }
+
+    private List<Release> findAllForProject(Long projectId) {
+        return mergeById(
+                releaseRepository.findByDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(projectId),
+                releaseRepository.findByDeployment_Project_IdOrderByReleaseDateDesc(projectId)
+        );
+    }
+
+    private List<Release> findForProjectEnvironment(Long projectId, DeploymentEnvironment env) {
+        return mergeById(
+                releaseRepository.findByEnvironmentAndDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(env, projectId),
+                releaseRepository.findByEnvironmentAndDeployment_Project_IdOrderByReleaseDateDesc(env, projectId)
+        );
+    }
+
+    private Optional<Release> findActiveForProjectEnvironment(Long projectId, DeploymentEnvironment env) {
+        // At most one release is ever "active" per project/environment (createRelease
+        // and rollbackRelease enforce that), so both queries can return at most one row
+        // each and they can't disagree — just take whichever is present. Preferring
+        // the direct-project query since it's the superset going forward.
+        Optional<Release> viaDirect = releaseRepository
+                .findTopByEnvironmentAndActiveTrueAndDeployment_Project_IdOrderByReleaseDateDesc(env, projectId);
+        if (viaDirect.isPresent()) return viaDirect;
+        return releaseRepository
+                .findTopByEnvironmentAndActiveTrueAndDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(env, projectId);
+    }
+
     /**
      * Cuts a new Release from a successful Deployment and promotes it to
      * live traffic in its environment (the "green" side goes live, the
@@ -48,6 +98,11 @@ public class ReleaseService {
      * project as the deployment being released, so two projects deploying
      * to the same environment name (e.g. both to STAGING) never step on
      * each other's active release.
+     *
+     * Works identically for deployments that came from a CI Pipeline OR
+     * straight from a hosting provider's deploy webhook — both are just "a
+     * Deployment row belonging to a project" here (see
+     * Deployment.resolveProjectId()).
      */
     public Release createRelease(CreateReleaseRequest req) {
         Deployment deployment = deploymentRepository.findById(req.getDeploymentId())
@@ -61,10 +116,14 @@ public class ReleaseService {
             throw new IllegalStateException("A release already exists for this deployment.");
         }
 
-        Long projectId = deployment.getPipeline().getProject().getId();
+        Long projectId = deployment.resolveProjectId();
+        if (projectId == null) {
+            throw new IllegalStateException("Deployment " + deployment.getId()
+                    + " isn't linked to a project or a pipeline — cannot determine which project to release under.");
+        }
+
         DeploymentEnvironment env = deployment.getEnvironment();
-        Optional<Release> currentlyActive = releaseRepository
-                .findTopByEnvironmentAndActiveTrueAndDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(env, projectId);
+        Optional<Release> currentlyActive = findActiveForProjectEnvironment(projectId, env);
 
         Release release = new Release();
         release.setDeployment(deployment);
@@ -99,6 +158,13 @@ public class ReleaseService {
      * so the previous release becomes active again. The "previous release"
      * lookup is scoped to the same project as the release being rolled
      * back, for the same isolation reason as createRelease above.
+     *
+     * NOTE: this only works for releases whose Deployment came from a
+     * NeuroForge-triggered CI Pipeline run — that's the only path with a
+     * stored previous image and a workflow to re-dispatch. Releases
+     * recorded directly from a hosting provider's deploy webhook (no
+     * Pipeline attached) can't be rolled back through this mechanism yet;
+     * roll those back from the provider's own dashboard.
      */
     public void rollbackRelease(Long releaseId) {
         Release release = releaseRepository.findById(releaseId)
@@ -108,8 +174,15 @@ public class ReleaseService {
             throw new IllegalStateException("Only the currently active release can be rolled back.");
         }
 
-        Long pipelineId = release.getDeployment().getPipeline().getId();
-        Long projectId = release.getDeployment().getPipeline().getProject().getId();
+        Deployment deployment = release.getDeployment();
+        if (deployment.getPipeline() == null) {
+            throw new IllegalStateException(
+                    "This release wasn't created from a NeuroForge-triggered CI build, so there's no pipeline "
+                            + "to re-dispatch for an automated rollback. Roll it back from your hosting provider directly.");
+        }
+
+        Long pipelineId = deployment.getPipeline().getId();
+        Long projectId = deployment.resolveProjectId();
 
         pipelineService.executeRollback(pipelineId); // dispatches the real rollback workflow
 
@@ -120,8 +193,7 @@ public class ReleaseService {
         // Reactivate the most recently superseded release in the same
         // environment AND same project — that's the image the rollback
         // workflow just redeployed.
-        releaseRepository.findByEnvironmentAndDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(
-                        release.getEnvironment(), projectId).stream()
+        findForProjectEnvironment(projectId, release.getEnvironment()).stream()
                 .filter(r -> r.getStatus() == ReleaseStatus.SUPERSEDED)
                 .findFirst()
                 .ifPresent(prev -> {
@@ -132,13 +204,12 @@ public class ReleaseService {
     }
 
     public Release getActiveRelease(Long projectId, DeploymentEnvironment environment) {
-        return releaseRepository.findTopByEnvironmentAndActiveTrueAndDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(
-                        environment, projectId)
+        return findActiveForProjectEnvironment(projectId, environment)
                 .orElseThrow(() -> new IllegalStateException("No active release for environment " + environment));
     }
 
     public List<ReleaseResponse> getHistory(Long projectId) {
-        return releaseRepository.findByDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(projectId).stream()
+        return findAllForProject(projectId).stream()
                 .map(this::toResponse)
                 .collect(Collectors.toList());
     }
@@ -207,12 +278,14 @@ public class ReleaseService {
     }
 
     private ReleaseKpiDTO computeKpis(Long projectId) {
-        List<Release> all = releaseRepository.findByDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(projectId);
+        List<Release> all = findAllForProject(projectId);
         long total = all.size();
 
         LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
-        long releasesThisMonth = releaseRepository.countByReleaseDateBetweenAndDeployment_Pipeline_Project_Id(
-                monthStart, LocalDateTime.now(), projectId);
+        LocalDateTime now = LocalDateTime.now();
+        long releasesThisMonth = all.stream()
+                .filter(r -> !r.getReleaseDate().isBefore(monthStart) && !r.getReleaseDate().isAfter(now))
+                .count();
 
         List<Release> rolledBack = all.stream()
                 .filter(r -> r.getStatus() == ReleaseStatus.ROLLED_BACK)
@@ -263,8 +336,7 @@ public class ReleaseService {
     // going live — i.e. how long the bad release was serving traffic.
     // Scoped to the same project as the rolled-back release.
     private double minutesToRecovery(Release rolledBackRelease, Long projectId) {
-        return releaseRepository.findByEnvironmentAndDeployment_Pipeline_Project_IdOrderByReleaseDateDesc(
-                        rolledBackRelease.getEnvironment(), projectId).stream()
+        return findForProjectEnvironment(projectId, rolledBackRelease.getEnvironment()).stream()
                 .filter(r -> r.getReleaseDate().isAfter(rolledBackRelease.getReleaseDate()))
                 .min(Comparator.comparing(Release::getReleaseDate))
                 .map(next -> (double) Duration.between(rolledBackRelease.getReleaseDate(), next.getReleaseDate()).toMinutes())
@@ -295,7 +367,9 @@ public class ReleaseService {
      * dashboard UI) go through getKpis(Long projectId) instead. Kept as the
      * simulated formula since "real uptime, aggregated across every
      * project's targets" isn't a single meaningful number the way per-project
-     * uptime is.
+     * uptime is. This one is unaffected by the pipeline/direct split since
+     * findAllByOrderByReleaseDateDesc() already returns every release exactly
+     * once regardless of how its deployment was linked.
      */
     public ReleaseKpiDTO getPlatformKpis() {
         long now = System.currentTimeMillis();

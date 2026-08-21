@@ -118,6 +118,7 @@ public Pipeline recordBuildResult(PipelineWebhookRequest req) {
         deployment.setSuccess(req.isDeploymentSuccess());
         deployment.setDeployedAt(LocalDateTime.now());
         deployment.setPipeline(pipeline);
+    deployment.setProject(project);
 
         if (req.getDeploymentInfo() != null) {
             var di = req.getDeploymentInfo();

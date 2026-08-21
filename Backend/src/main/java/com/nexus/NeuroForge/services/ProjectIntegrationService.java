@@ -43,6 +43,10 @@ public class ProjectIntegrationService {
         integration.setGithubBranch(req.getGithubBranch() != null ? req.getGithubBranch() : "main");
         integration.setWorkflowFile(req.getWorkflowFile() != null ? req.getWorkflowFile() : "ci-cd.yml");
 
+        // NEW — deploy hook URL. Blank/null just means "no real deploy step",
+        // same as leaving the GitHub token blank means "keep the existing one".
+        integration.setDeployHookUrl(req.getDeployHookUrl());
+
         // Only overwrite the stored token if the user actually typed a new one —
         // leaving the field blank on an edit keeps the existing connected token.
         if (req.getGithubToken() != null && !req.getGithubToken().isBlank()) {
@@ -93,7 +97,8 @@ public class ProjectIntegrationService {
                 i.getGithubBranch(),
                 i.getWorkflowFile(),
                 i.getWebhookSecret(),
-                i.getGithubTokenEncrypted() != null
+                i.getGithubTokenEncrypted() != null,
+                i.getDeployHookUrl()
         );
     }
 }

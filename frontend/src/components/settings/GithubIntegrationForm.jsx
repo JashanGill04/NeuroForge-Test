@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Github, RefreshCw, Copy } from 'lucide-react'
+import { Github, RefreshCw, Copy, Webhook } from 'lucide-react'
 import { projectIntegrationApi } from '../../api/ProjectIntegration'
 import { Alert } from '../ui'
+
+const ENVIRONMENTS = ['DEVELOPMENT', 'TESTING', 'STAGING', 'PRODUCTION']
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:9000/api'
 
 export default function GithubIntegrationForm({ projectId, canEdit }) {
   const [integration, setIntegration] = useState(null)
@@ -13,8 +16,10 @@ export default function GithubIntegrationForm({ projectId, canEdit }) {
 
   const [form, setForm] = useState({
     githubOwner: '', githubRepo: '', githubBranch: 'main',
-    workflowFile: 'ci-cd.yml', githubToken: ''
+    workflowFile: 'ci-cd.yml', githubToken: '', deployHookUrl: ''
   })
+
+  const [webhookEnv, setWebhookEnv] = useState('PRODUCTION')
 
   const load = () => {
     setLoading(true)
@@ -27,7 +32,8 @@ export default function GithubIntegrationForm({ projectId, canEdit }) {
           githubOwner: data.githubOwner || '',
           githubRepo: data.githubRepo || '',
           githubBranch: data.githubBranch || 'main',
-          workflowFile: data.workflowFile || 'ci-cd.yml'
+          workflowFile: data.workflowFile || 'ci-cd.yml',
+          deployHookUrl: data.deployHookUrl || ''
         }))
       })
       .catch(() => setNotConnected(true))
@@ -67,6 +73,13 @@ export default function GithubIntegrationForm({ projectId, canEdit }) {
   const copySecret = () => {
     navigator.clipboard.writeText(integration.webhookSecret)
     setSuccess('Webhook secret copied to clipboard.')
+  }
+
+  const inboundWebhookUrl = `${API_BASE}/deploy-webhooks/generic?projectId=${projectId}&environment=${webhookEnv}`
+
+  const copyInboundUrl = () => {
+    navigator.clipboard.writeText(inboundWebhookUrl)
+    setSuccess('Inbound webhook URL copied to clipboard.')
   }
 
   if (loading) return <div className="empty-sub">Loading GitHub connection…</div>
@@ -137,6 +150,21 @@ export default function GithubIntegrationForm({ projectId, canEdit }) {
             />
           </label>
 
+          <label className="field">
+            <span>Deploy hook URL (optional)</span>
+            <input
+              value={form.deployHookUrl}
+              onChange={(e) => setForm((f) => ({ ...f, deployHookUrl: e.target.value }))}
+              placeholder="https://your-host.example.com/deploy-hooks/..."
+            />
+            <span className="field-hint">
+              The "deploy hook" / "build hook" URL from your hosting provider (Render, Railway, Fly.io,
+              Vercel, Netlify all expose one). CI calls this after a successful build so a real deploy
+              actually happens. Also add this same value as a <code>DEPLOY_HOOK_URL</code> repository
+              secret on GitHub — workflows can't read it from here directly.
+            </span>
+          </label>
+
           <button className="btn-primary btn-block" type="submit" disabled={saving}>
             {saving ? 'Saving…' : integration ? 'Update connection' : 'Connect repository'}
           </button>
@@ -167,6 +195,31 @@ export default function GithubIntegrationForm({ projectId, canEdit }) {
           </p>
         </div>
       )}
+
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--line-soft)' }}>
+        <div className="field" style={{ marginBottom: 10 }}>
+          <span><Webhook size={13} style={{ verticalAlign: -2 }} /> Inbound deploy webhook (paste into your hosting provider)</span>
+          <div className="field field-inline" style={{ marginBottom: 8 }}>
+            <select className="inline-select" value={webhookEnv} onChange={(e) => setWebhookEnv(e.target.value)}>
+              {ENVIRONMENTS.map((e) => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={inboundWebhookUrl} readOnly style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }} />
+            <button type="button" className="btn-ghost-sm" onClick={copyInboundUrl} title="Copy">
+              <Copy size={14} />
+            </button>
+          </div>
+        </div>
+        <p className="page-subtitle-inline">
+          Paste this into your host's "deploy notification" / "webhook" setting for the environment you want to
+          track (pick the environment above first — each environment needs its own URL). When your host reports
+          a deploy finished, NeuroForge records it and, on success, automatically cuts a release for it. This
+          endpoint currently accepts the generic <code>{'{ status, commitHash, deployId }'}</code> payload shape —
+          if your host sends something else, its payload just needs a small adapter (see{' '}
+          <code>GenericDeployAdapter</code> / <code>RenderDeployAdapter</code> in the backend) to normalize the field names.
+        </p>
+      </div>
     </div>
   )
 }

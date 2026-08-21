@@ -12,6 +12,9 @@ public class ProjectIntegrationRequest {
     private String metricsToken;
     private String prometheusJobName;
 
+    // NEW
+    private String deployHookUrl;
+
     public String getGithubOwner() { return githubOwner; }
     public void setGithubOwner(String githubOwner) { this.githubOwner = githubOwner; }
     public String getGithubRepo() { return githubRepo; }
@@ -45,4 +48,7 @@ public class ProjectIntegrationRequest {
     public void setPrometheusJobName(String prometheusJobName) {
         this.prometheusJobName = prometheusJobName;
     }
+
+    public String getDeployHookUrl() { return deployHookUrl; }
+    public void setDeployHookUrl(String deployHookUrl) { this.deployHookUrl = deployHookUrl; }
 }

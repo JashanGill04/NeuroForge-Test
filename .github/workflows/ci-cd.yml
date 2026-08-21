@@ -165,10 +165,23 @@ jobs:
         if: github.event.inputs.rollback != 'true'
         run: docker push ghcr.io/${{ steps.image.outputs.repo }}:${{ steps.image.outputs.tag }}
 
+      - name: Trigger real deploy hook (if configured)
+        if: always()
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
+        run: |
+          if [ -n "$DEPLOY_HOOK_URL" ]; then
+            echo "Calling deploy hook to trigger a real deployment..."
+            curl -s -o /dev/null -w "Deploy hook responded: %{http_code}\n" -X POST "$DEPLOY_HOOK_URL" \
+              || echo "Deploy hook call failed — continuing, this is non-fatal to the pipeline."
+          else
+            echo "No DEPLOY_HOOK_URL secret set — skipping real deploy trigger. Add one in Project Settings > GitHub Repository to enable this."
+          fi
+
       - name: Pull previous image (rollback)
         if: github.event.inputs.rollback == 'true'
         run: docker pull ghcr.io/${{ steps.image.outputs.repo }}:${{ steps.image.outputs.tag }}
-
+        
       - name: Checkpoint - docker build/push done
         id: docker_timer
         run: echo "end_epoch=$(date +%s)" >> "$GITHUB_OUTPUT"

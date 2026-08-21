@@ -12,6 +12,11 @@ public class ProjectIntegrationResponse {
     private String monitoredUrl;
     private String prometheusJobName;
 
+    // NEW — safe to return as-is; unlike the GitHub token this isn't a secret,
+    // just a webhook URL (though it's still sensitive-ish, so treat it the way
+    // the UI already treats the webhook secret: visible but not advertised).
+    private String deployHookUrl;
+
     public ProjectIntegrationResponse() {}
 
     public String getMonitoredUrl() {
@@ -22,7 +27,9 @@ public class ProjectIntegrationResponse {
         return prometheusJobName;
     }
 
-    public ProjectIntegrationResponse(Long id, Long projectId, String githubOwner, String githubRepo, String githubBranch, String workflowFile, String webhookSecret, boolean tokenConfigured) {
+    public ProjectIntegrationResponse(Long id, Long projectId, String githubOwner, String githubRepo,
+                                      String githubBranch, String workflowFile, String webhookSecret,
+                                      boolean tokenConfigured, String deployHookUrl) {
         this.id = id;
         this.projectId = projectId;
         this.githubOwner = githubOwner;
@@ -31,6 +38,7 @@ public class ProjectIntegrationResponse {
         this.workflowFile = workflowFile;
         this.webhookSecret = webhookSecret;
         this.tokenConfigured = tokenConfigured;
+        this.deployHookUrl = deployHookUrl;
     }
 
     public Long getId() { return id; }
@@ -41,4 +49,5 @@ public class ProjectIntegrationResponse {
     public String getWorkflowFile() { return workflowFile; }
     public String getWebhookSecret() { return webhookSecret; }
     public boolean isTokenConfigured() { return tokenConfigured; }
+    public String getDeployHookUrl() { return deployHookUrl; }
 }
