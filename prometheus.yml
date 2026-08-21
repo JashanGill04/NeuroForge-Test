@@ -6,3 +6,12 @@ scrape_configs:
     metrics_path: '/actuator/prometheus'
     static_configs:
       - targets: ['backend:9000']
+
+  - job_name: 'render-nodejs-backend'
+    scheme: https
+    metrics_path: '/metrics'
+    authorization:
+      credentials: 'a656752220a94c10ac05b1500f818998'
+    static_configs:
+      # Removed "https://" and the trailing "/" 
+      - targets: ['chat-app-rofr.onrender.com']

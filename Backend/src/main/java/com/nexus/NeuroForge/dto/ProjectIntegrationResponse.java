@@ -9,12 +9,20 @@ public class ProjectIntegrationResponse {
     private String workflowFile;
     private String webhookSecret;
     private boolean tokenConfigured;
+    private String monitoredUrl;
+    private String prometheusJobName;
 
     public ProjectIntegrationResponse() {}
 
-    public ProjectIntegrationResponse(Long id, Long projectId, String githubOwner, String githubRepo,
-                                      String githubBranch, String workflowFile, String webhookSecret,
-                                      boolean tokenConfigured) {
+    public String getMonitoredUrl() {
+        return monitoredUrl;
+    }
+
+    public String getPrometheusJobName() {
+        return prometheusJobName;
+    }
+
+    public ProjectIntegrationResponse(Long id, Long projectId, String githubOwner, String githubRepo, String githubBranch, String workflowFile, String webhookSecret, boolean tokenConfigured) {
         this.id = id;
         this.projectId = projectId;
         this.githubOwner = githubOwner;

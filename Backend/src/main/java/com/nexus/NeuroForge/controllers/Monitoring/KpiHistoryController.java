@@ -1,4 +1,4 @@
-package com.nexus.NeuroForge.controllers;
+package com.nexus.NeuroForge.controllers.Monitoring;
 
 import com.nexus.NeuroForge.models.KpiSnapshot;
 import com.nexus.NeuroForge.repositories.KpiSnapshotRepository;

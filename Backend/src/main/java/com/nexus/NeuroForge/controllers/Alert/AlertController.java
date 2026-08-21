@@ -1,4 +1,4 @@
-package com.nexus.NeuroForge.controllers;
+package com.nexus.NeuroForge.controllers.Alert;
 
 import com.nexus.NeuroForge.dto.AlertRuleRequest;
 import com.nexus.NeuroForge.models.Alert;

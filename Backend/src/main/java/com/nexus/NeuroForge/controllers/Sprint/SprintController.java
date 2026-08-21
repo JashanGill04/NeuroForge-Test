@@ -1,4 +1,4 @@
-package com.nexus.NeuroForge.controllers;
+package com.nexus.NeuroForge.controllers.Sprint;
 
 import com.nexus.NeuroForge.dto.SprintRequest;
 import com.nexus.NeuroForge.dto.SprintResponse;

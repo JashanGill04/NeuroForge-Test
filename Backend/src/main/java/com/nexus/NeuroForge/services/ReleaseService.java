@@ -8,6 +8,8 @@ import com.nexus.NeuroForge.models.interfaces.DeploymentEnvironment;
 import com.nexus.NeuroForge.models.interfaces.DeploymentSlot;
 import com.nexus.NeuroForge.models.interfaces.ReleaseStatus;
 import com.nexus.NeuroForge.repositories.DeploymentRepository;
+import com.nexus.NeuroForge.repositories.HealthCheckResultRepository;
+import com.nexus.NeuroForge.repositories.MonitoringTargetRepository;
 import com.nexus.NeuroForge.repositories.ReleaseRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,9 @@ public class ReleaseService {
 
     @Autowired private ReleaseRepository releaseRepository;
     @Autowired private DeploymentRepository deploymentRepository;
+
+    @Autowired private HealthCheckResultRepository healthCheckResultRepository;
+    @Autowired private MonitoringTargetRepository monitoringTargetRepository;
 
     // PipelineService already owns the GitHub Actions dispatch + rollback-eligibility
     // logic from M3 (executeRollback). ReleaseService reuses it rather than
@@ -178,24 +183,10 @@ public class ReleaseService {
     }
 
     /**
-     * KPI Simulation (per Milestone 4 spec): uptime% and MTTR are derived
-     * from release/rollback history rather than a live monitoring feed,
-     * since that lives in Neha's Prometheus/Grafana stack. These numbers
-     * are exposed as real gauges (see ObservabilityConfig) so Prometheus
-     * can scrape and Grafana can chart them like any other metric, and are
-     * swappable for live-monitoring-derived values later without changing
-     * the API contract.
-     *
-     * Scoped per-project: cache keys are project IDs, since KPIs are now
-     * computed per-project rather than globally across the whole platform.
+     * KPIs are cached per project so a scrape / dashboard burst only
+     * recomputes once per project every few seconds, while still surfacing
+     * new releases/rollbacks almost immediately.
      */
-    // Prometheus scrapes /actuator/prometheus roughly every 10-15s, and
-    // ObservabilityConfig registers gauges that each call getKpis() —
-    // without this, one scrape = a full table scan + aggregation per
-    // project every time. Cached for a few seconds per-project so a
-    // scrape (or a burst of dashboard requests) only recomputes once per
-    // project; still short enough that a brand-new release or rollback
-    // shows up almost immediately, so it's not "hardcoded", just debounced.
     private final Map<Long, ReleaseKpiDTO> cachedKpis = new ConcurrentHashMap<>();
     private final Map<Long, Long> cachedKpisAt = new ConcurrentHashMap<>();
     private static final long KPI_CACHE_MS = 5000L;
@@ -235,9 +226,36 @@ public class ReleaseService {
                 .orElse(0);
 
         double incidentRate = total == 0 ? 0 : (double) rolledBackCount / total;
-        double uptimePercent = Math.max(0, 100.0 - (incidentRate * 5.0));
+        double uptimePercent = computeRealOrSimulatedUptime(projectId, incidentRate);
 
         return new ReleaseKpiDTO(releasesThisMonth, round(uptimePercent), round(mttrMinutes), total, rolledBackCount);
+    }
+
+    /**
+     * Prefers real uptime from HealthCheckResult (populated by
+     * ExternalHealthMonitorService polling every enabled MonitoringTarget
+     * for this project, regardless of which Prober strategy produced the
+     * rows). Falls back to the simulated release/rollback-derived formula
+     * for projects that haven't configured a monitoring target yet, or
+     * haven't accumulated any probe history in the last 24h.
+     */
+    private double computeRealOrSimulatedUptime(Long projectId, double incidentRate) {
+        boolean hasMonitoringTarget = !monitoringTargetRepository
+                .findByProject_IdAndEnabledTrue(projectId)
+                .isEmpty();
+
+        if (!hasMonitoringTarget) {
+            return Math.max(0, 100.0 - (incidentRate * 5.0));
+        }
+
+        LocalDateTime windowStart = LocalDateTime.now().minusHours(24);
+        long total = healthCheckResultRepository.countByProjectIdAndCheckedAtAfter(projectId, windowStart);
+        if (total == 0) {
+            return Math.max(0, 100.0 - (incidentRate * 5.0));
+        }
+
+        long up = healthCheckResultRepository.countByProjectIdAndUpTrueAndCheckedAtAfter(projectId, windowStart);
+        return round(100.0 * up / total);
     }
 
     // Time between a rolled-back release going live and the replacement
@@ -270,14 +288,14 @@ public class ReleaseService {
         );
     }
 
-
-
-
     /**
      * Platform-wide KPIs, aggregated across ALL projects — used by
      * ObservabilityConfig's Prometheus gauges, which are single global values
      * and can't be parameterized per scrape. Per-project KPIs (used by the
-     * dashboard UI) go through getKpis(Long projectId) instead.
+     * dashboard UI) go through getKpis(Long projectId) instead. Kept as the
+     * simulated formula since "real uptime, aggregated across every
+     * project's targets" isn't a single meaningful number the way per-project
+     * uptime is.
      */
     public ReleaseKpiDTO getPlatformKpis() {
         long now = System.currentTimeMillis();
@@ -324,10 +342,4 @@ public class ReleaseService {
                 .map(next -> (double) Duration.between(rolledBackRelease.getReleaseDate(), next.getReleaseDate()).toMinutes())
                 .orElse(-1.0);
     }
-
-
-
-
-
-
 }

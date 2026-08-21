@@ -1,4 +1,4 @@
-package com.nexus.NeuroForge.controllers;
+package com.nexus.NeuroForge.controllers.Blockers;
 
 // import com.nexus.NeuroForge.events.TaskEvent;
 import com.nexus.NeuroForge.models.Blocker;

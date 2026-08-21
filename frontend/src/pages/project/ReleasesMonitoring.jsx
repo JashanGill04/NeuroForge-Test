@@ -8,6 +8,8 @@ import { releaseService } from "../../services/ReleaseService";
 import { alertService } from "../../services/alertService";
 import { kpiHistoryService } from "../../services/kpiHistoryService";
 import { ENVIRONMENTS } from "../../components/releases/releaseConstants";
+
+
 import ReleaseKpiStats from "../../components/releases/ReleaseKpiStats";
 import EnvironmentHealthPanel from "../../components/releases/EnvironmentHealthPanel";
 import ReleasesTable from "../../components/releases/ReleasesTable";
@@ -16,7 +18,8 @@ import ReleaseDetailModal from "../../components/releases/ReleaseDetailModal";
 import AlertsPanel from "../../components/releases/AlertsPanel";
 import KpiTrendChart from "../../components/releases/KpiTrendChart";
 import AlertRulesPanel from "../../components/releases/AlertRulesPanel";
-
+import LiveMonitoringPanel from "../../components/releases/LiveMonitoringPanel";
+import {monitoringTargetsService} from "../../services/monitoringTargetsService";
 export default function ReleasesMonitoring() {
   const { project } = useOutletContext();
   const { roles } = useAuth();
@@ -44,6 +47,9 @@ export default function ReleasesMonitoring() {
   const [releaseDetails, setReleaseDetails] = useState(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
+const [monitoringTargets, setMonitoringTargets] = useState([]);
+const [loadingTargets, setLoadingTargets] = useState(true);
+
 
  const fetchReleasesAndKpis = useCallback(async (silent = false) => {
   if (!project?.id) return
@@ -61,6 +67,21 @@ export default function ReleasesMonitoring() {
     if (!silent) setLoading(false)
   }
 }, [project?.id])
+
+const fetchMonitoringTargets = useCallback(async (silent = false) => {
+  if (!project?.id) return;
+  if (!silent) setLoadingTargets(true);
+  try {
+    const data = await  monitoringTargetsService.getAll(project.id);
+    setMonitoringTargets(data || []);
+  } catch (err) {
+    console.error("Failed to load monitoring targets", err);
+  } finally {
+    if (!silent) setLoadingTargets(false);
+  }
+}, [project?.id]);
+
+
 
 
 const fetchEnvHealth = useCallback(async (silent = false) => {
@@ -130,6 +151,8 @@ const fetchHistory = useCallback(
       fetchAlerts(silent);
       fetchRules(silent);
       fetchHistory(silent);
+      fetchMonitoringTargets(silent);  
+
     },
     [
       fetchReleasesAndKpis,
@@ -254,6 +277,7 @@ const fetchHistory = useCallback(
         <>
           <ReleaseKpiStats kpis={kpis} />
           <EnvironmentHealthPanel envHealth={envHealth} loading={envLoading} />
+          <LiveMonitoringPanel targets={monitoringTargets} loading={loadingTargets} />
           <AlertRulesPanel
   rules={rules}
   loading={loadingRules}

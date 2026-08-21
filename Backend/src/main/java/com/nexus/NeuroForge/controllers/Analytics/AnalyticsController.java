@@ -1,4 +1,4 @@
-package com.nexus.NeuroForge.controllers;
+package com.nexus.NeuroForge.controllers.Analytics;
 
 import com.nexus.NeuroForge.dto.AnalyticsOverviewDTO;
 import com.nexus.NeuroForge.services.AnalyticsService;

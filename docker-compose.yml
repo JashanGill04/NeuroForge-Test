@@ -81,6 +81,7 @@ services:
       KEYCLOAK_ADMIN_SERVER_URL: http://keycloak:8080
       APP_ENCRYPTION_SECRET: ${APP_ENCRYPTION_SECRET}
       APP_ENCRYPTION_SALT: ${APP_ENCRYPTION_SALT}
+      APP_PROMETHEUS_URL: http://prometheus:9090
     depends_on:
       postgres:
         condition: service_healthy

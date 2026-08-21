@@ -10,6 +10,7 @@ import DangerZone from '../../components/settings/DangerZone'
 import ProjectOverviewCard from '../../components/settings/ProjectOverviewCard'
 import GithubIntegrationForm from '../../components/settings/GithubIntegrationForm'
 import './Settings.css'
+import MonitoringTargetsPanel from '../../components/settings/MonitoringTargetsPanel'
 
 export default function Settings() {
   const { project, reloadProject } = useOutletContext()
@@ -89,6 +90,7 @@ export default function Settings() {
       <Alert type="success" onClose={() => setSuccess('')}>{success}</Alert>
 
       <GithubIntegrationForm projectId={project.id} canEdit={canEdit} />
+       <MonitoringTargetsPanel projectId={project.id} canEdit={canEdit} />
 
       <div className="ps-layout">
         <div className="panel">

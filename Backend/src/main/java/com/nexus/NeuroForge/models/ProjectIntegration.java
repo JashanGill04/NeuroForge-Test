@@ -21,6 +21,7 @@ public class ProjectIntegration {
     private String githubBranch = "main";
     private String workflowFile = "ci-cd.yml";
 
+
     // Encrypted at rest — never serialized, never returned raw via API.
     @Column(name = "github_token_encrypted", columnDefinition = "TEXT")
     @JsonIgnore
@@ -30,6 +31,37 @@ public class ProjectIntegration {
     // Used to verify inbound webhook payloads (see WebhookSignatureValidator).
     @Column(name = "webhook_secret")
     private String webhookSecret;
+
+    private String monitoredUrl="";       // e.g. https://your-app.onrender.com
+    private String metricsToken="";
+    private String prometheusJobName="";// matches METRICS_TOKEN on the Render side
+
+    public String getPrometheusJobName() {
+        return prometheusJobName;
+    }
+
+    public void setPrometheusJobName(String prometheusJobName) {
+        this.prometheusJobName = prometheusJobName;
+    }
+
+    public String getMetricsToken() {
+        return metricsToken;
+    }
+
+    public void setMetricsToken(String metricsToken) {
+        this.metricsToken = metricsToken;
+    }
+
+    public String getMonitoredUrl() {
+        return monitoredUrl;
+    }
+
+    public void setMonitoredUrl(String monitoredUrl) {
+        this.monitoredUrl = monitoredUrl;
+    }
+
+      // e.g. "render-nodejs-backend" — must match prometheus.yml
+
 
     public ProjectIntegration() {}
 

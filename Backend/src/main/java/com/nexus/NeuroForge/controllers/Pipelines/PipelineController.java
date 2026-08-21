@@ -1,4 +1,4 @@
-package com.nexus.NeuroForge.controllers;
+package com.nexus.NeuroForge.controllers.Pipelines;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.NeuroForge.dto.*;

@@ -46,6 +46,7 @@ public class SecurityConfig {
                 // Only this line allows the webhook through without token validation
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/pipelines/webhook").permitAll()
+                        .requestMatchers("/api/deploy-webhooks/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .anyRequest().authenticated()
                 )
